@@ -33,16 +33,17 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 OF SUCH DAMAGE.
 */
 
+// taken from
+// https://github.com/riscv-mcu/GD32VF103_Firmware_Library/blob/master/Examples/I2C/Slave_receiver/main.c
 #include "gd32vf103.h"
 #include <stdio.h>
 #include "gd32vf103v_eval.h"
+#include <string.h>
 
 // This seems to get copied around a lot.
 #include "lcd.h"
 
 #define I2C0_OWN_ADDRESS7      0x82
-
-uint8_t i2c_receiver[16];
 
 void rcu_config(void);
 void gpio_config(void);
@@ -56,16 +57,16 @@ void i2c_config(void);
 */
 const int LineHeight = 15;
 const int Base = 5;
+const int BytesToRead = 16;
 int main(void)
 {
     int i;
     Lcd_Init();
     LCD_Clear(BLACK);
 
-    /* configure USART */
-    gd_eval_com_init(EVAL_COM0);
-    
-    LCD_ShowString(0,Base,"I2C Start", BRRED);
+    int line=0;
+
+    LCD_ShowString(0,Base+line*LineHeight,(const unsigned char*)"I2C Start", BRRED);
 
     /* RCU config */
     rcu_config();
@@ -74,30 +75,51 @@ int main(void)
     /* I2C config */
     i2c_config();
 
-    i=0;
     //i2c_start_on_bus(I2C0);
     /* wait until ADDSEND bit is set */
     while(!i2c_flag_get(I2C0, I2C_FLAG_ADDSEND));
     /* clear ADDSEND bit */
     i2c_flag_clear(I2C0, I2C_FLAG_ADDSEND);
-    LCD_ShowString(0,Base+1*LineHeight,"Receiving data", YELLOW);
-    for(i=0; i<2; i++){
+    LCD_ShowString(0,Base+line*LineHeight,(const unsigned char*)"Receiving data", YELLOW);
+    line++;
+    uint8_t i2c_receiver[BytesToRead];
+    char tmpBuf[2];
+    LCD_ShowString(0,Base+line*LineHeight,"waiting", BRRED);
+
+    for(int i=0; i<BytesToRead; i++){
         /* wait until the RBNE bit is set (receive buffer not empty) */
         while(!i2c_flag_get(I2C0, I2C_FLAG_RBNE));
 
         /* read a data byte from I2C_DATA */
         i2c_receiver[i] = i2c_data_receive(I2C0);
-        char msg[32];
-        snprintf(msg,32,"Received: %s",i2c_receiver);
-        LCD_ShowString(0,Base+i*LineHeight,msg, YELLOW);
-
+        // not a nice way, but...
+        unsigned char status[BytesToRead];
+        for (int j = 0 ; j < BytesToRead ; j++) {
+            snprintf(tmpBuf,2,"%x",j);
+            status[j] = tmpBuf[0];
+        }
+        snprintf(tmpBuf,2,"%x",i2c_receiver[i]);
+        status[i] = tmpBuf[0];
+        LCD_ShowString(0,Base+line+1*LineHeight,i2c_receiver, YELLOW);
     }
+    line++;
+    LCD_ShowString(0,Base+line*LineHeight,"done reading", YELLOW);
+    unsigned char status[BytesToRead+2];
+    memset(status, 0, BytesToRead);
+    status[0] = '[';
+    status[15] = ']';
+    for (int j = 0; j < BytesToRead ; ++j) {
+        snprintf(tmpBuf,2,"%x",i2c_receiver[i]);
+        status[j+1] = tmpBuf[0];
+    }
+    LCD_ShowString(0,Base+line*LineHeight,status, BRRED);
+
     /* wait until the STPDET bit is set */
     while(!i2c_flag_get(I2C0, I2C_FLAG_STPDET));
     /* clear the STPDET bit */
     i2c_enable(I2C0);
     
-    //LCD_ShowString(0,Base+5*LineHeight,"I2C Complete", BRRED);
+    //LCD_ShowString(0,Base+5*LineHeight,(const unsigned char*)"I2C Complete", BRRED);
     
     while(1){
     }
